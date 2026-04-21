@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tempmail-custom-domain",
+  "main": "src/index.js",
+  "compatibility_date": "2026-04-10",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "mail.example.com",
+      "custom_domain": true
+    }
+  ],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": [
+      "0 */6 * * *"
+    ]
+  },
+  "vars": {
+    "MAIL_DOMAIN": "mail.example.com",
+    "MAIL_DOMAINS": "mail.example.com,mail2.example.com",
+    "PUBLIC_BASE_URL": "https://mail.example.com",
+    "ADMIN_IDS": "123456789",
+    "ADMIN_CONTACT": "@yourtelegramusername",
+    "INBOX_TTL_HOURS": "24",
+    "MAX_BODY_CHARS": "12000",
+    "AUTO_DELETE_EXPIRED": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tempmail",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ]
+}

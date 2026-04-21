@@ -1,0 +1,216 @@
+import { formatTimestamp, getNextWibResetLabel } from "./utils.js";
+import { isUnlimitedApiAccess } from "./db.js";
+
+function buildAccessSection(access) {
+  if (isUnlimitedApiAccess(access)) {
+    return [
+      `- User ID: ${access.user_id}`,
+      "- Quota: unlimited",
+      "- Reset quota: tidak berlaku",
+      "- Expires: unlimited",
+    ].join("\n");
+  }
+
+  return [
+    `- User ID: ${access.user_id}`,
+    `- Quota: ${Number(access.quota_daily)} request per hari`,
+    `- Reset quota: ${getNextWibResetLabel()}`,
+    `- Expires: ${formatTimestamp(access.expires_at)}`,
+  ].join("\n");
+}
+
+function buildDomainSection(domains) {
+  if (!Array.isArray(domains) || domains.length === 0) {
+    return "- example.com";
+  }
+
+  return domains.map((domain) => `- ${domain}`).join("\n");
+}
+
+function normalizeBaseUrl(value) {
+  const raw = String(value || "").trim().replace(/\/+$/, "");
+  if (!raw) {
+    return "https://example.com";
+  }
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  return `https://${raw}`;
+}
+
+export function buildApiDoc(access, domains = [], baseUrl = "") {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const defaultDomain = Array.isArray(domains) && domains.length > 0 ? domains[0] : "example.com";
+  const key = String(access.api_key || "");
+  const apiKeyHeaderLine = `  -Headers @{ "X-API-Key" = "${key}" } \``;
+  const apiKeyHeaderLineLast = `  -Headers @{ "X-API-Key" = "${key}" }`;
+
+  return [
+    "# API Documentation",
+    "",
+    `Generated at: ${new Date().toISOString()}`,
+    "",
+    "## Base URL",
+    "",
+    "```text",
+    normalizedBaseUrl,
+    "```",
+    "",
+    "## Available Domains",
+    "",
+    buildDomainSection(domains),
+    "",
+    "## Authentication",
+    "",
+    "Gunakan header berikut di setiap request:",
+    "",
+    "```text",
+    `X-API-Key: ${key}`,
+    "```",
+    "",
+    "Atau:",
+    "",
+    "```text",
+    `Authorization: Bearer ${key}`,
+    "```",
+    "",
+    "## Access Info",
+    "",
+    buildAccessSection(access),
+    "",
+    "## Endpoints",
+    "",
+    "### Health Check",
+    "",
+    "```http",
+    "GET /api/health",
+    "```",
+    "",
+    "### Create Inbox",
+    "",
+    "```http",
+    "POST /api/inboxes",
+    "Content-Type: application/json",
+    "```",
+    "",
+    "Body contoh:",
+    "",
+    "```json",
+    `{\"alias\":\"promo\",\"domain\":\"${defaultDomain}\",\"ttlHours\":24}`,
+    "```",
+    "",
+    "### List Inboxes",
+    "",
+    "```http",
+    "GET /api/inboxes",
+    "```",
+    "",
+    "### List Messages",
+    "",
+    "```http",
+    "GET /api/inboxes/{alias}/messages",
+    "```",
+    "",
+    "### Read Message",
+    "",
+    "```http",
+    "GET /api/messages/{id}",
+    "```",
+    "",
+    "### Delete Inbox",
+    "",
+    "```http",
+    "DELETE /api/inboxes/{alias}",
+    "```",
+    "",
+    "### Get Webhook",
+    "",
+    "```http",
+    "GET /api/webhook",
+    "```",
+    "",
+    "### Set Webhook",
+    "",
+    "```http",
+    "PUT /api/webhook",
+    "Content-Type: application/json",
+    "```",
+    "",
+    "Body contoh:",
+    "",
+    "```json",
+    "{\"url\":\"https://your-server.com/tempmail-webhook\",\"secret\":\"your-webhook-secret\"}",
+    "```",
+    "",
+    "### Test Webhook",
+    "",
+    "```http",
+    "POST /api/webhook/test",
+    "```",
+    "",
+    "### Delete Webhook",
+    "",
+    "```http",
+    "DELETE /api/webhook",
+    "```",
+    "",
+    "## PowerShell Examples",
+    "",
+    "### Create Inbox",
+    "",
+    "```powershell",
+    "Invoke-RestMethod `",
+    `  -Uri "${normalizedBaseUrl}/api/inboxes" \``,
+    "  -Method Post `",
+    apiKeyHeaderLine,
+    "  -ContentType \"application/json\" `",
+    `  -Body '{\"alias\":\"promo\",\"domain\":\"${defaultDomain}\",\"ttlHours\":24}'`,
+    "```",
+    "",
+    "### List Inboxes",
+    "",
+    "```powershell",
+    "Invoke-RestMethod `",
+    `  -Uri "${normalizedBaseUrl}/api/inboxes" \``,
+    "  -Method Get `",
+    apiKeyHeaderLineLast,
+    "```",
+    "",
+    "### Set Webhook",
+    "",
+    "```powershell",
+    "Invoke-RestMethod `",
+    `  -Uri "${normalizedBaseUrl}/api/webhook" \``,
+    "  -Method Put `",
+    "  -ContentType \"application/json\" `",
+    apiKeyHeaderLine,
+    "  -Body '{\"url\":\"https://your-server.com/tempmail-webhook\",\"secret\":\"your-webhook-secret\"}'",
+    "```",
+    "",
+    "### Test Webhook",
+    "",
+    "```powershell",
+    "Invoke-RestMethod `",
+    `  -Uri "${normalizedBaseUrl}/api/webhook/test" \``,
+    "  -Method Post `",
+    apiKeyHeaderLineLast,
+    "```",
+    "",
+    "### Read Message",
+    "",
+    "```powershell",
+    "Invoke-RestMethod `",
+    `  -Uri "${normalizedBaseUrl}/api/messages/MSG_ID" \``,
+    "  -Method Get `",
+    apiKeyHeaderLineLast,
+    "```",
+    "",
+    "## Notes",
+    "",
+    `- Alias mengikuti domain yang dipilih (contoh: ${defaultDomain}).`,
+    "- Pilih domain lewat field body `domain` saat create inbox.",
+    "- Endpoint API hanya bisa dipakai selama akses masih aktif.",
+    "- Simpan API key ini dengan aman.",
+    "",
+  ].join("\n");
+}

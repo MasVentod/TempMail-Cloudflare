@@ -1,0 +1,175 @@
+# Telegram Temp Mail Bot Template
+
+Template bot Telegram untuk membuat inbox temp mail di domain Cloudflare Anda. Email diterima lewat Cloudflare Email Routing, diproses oleh Email Worker, disimpan ke D1, lalu dibaca dari Telegram atau REST API.
+
+## Fitur
+
+- Inbox temp mail per user Telegram
+- Alias random atau custom lewat bot
+- Baca email terbaru langsung dari Telegram
+- REST API dengan API key per user
+- Webhook API saat email baru masuk
+- Dukungan multi-domain dan subaddressing (`promo+tag@mail.example.com`)
+- Semua email tetap di Cloudflare Worker + D1, tanpa forward ke inbox pribadi
+
+## Struktur Project
+
+- `src/index.js` entry Worker
+- `src/router.js` routing HTTP
+- `src/telegram.js` command bot dan webhook Telegram
+- `src/email.js` handler email masuk
+- `src/api.js` REST API
+- `src/db.js` query/helper D1
+- `src/utils.js` helper umum
+- `migrations/` schema D1
+- `wrangler.jsonc` config template default `workers.dev`
+- `wrangler.example.jsonc` contoh config custom domain
+- `.dev.vars.example` contoh secret lokal
+
+## Yang Perlu Diganti Sebelum Deploy
+
+Edit `wrangler.jsonc` lalu sesuaikan:
+
+- `name`
+- `MAIL_DOMAIN`
+- `MAIL_DOMAINS`
+- `PUBLIC_BASE_URL`
+- `ADMIN_IDS`
+- `ADMIN_CONTACT`
+- `d1_databases[0].database_id`
+
+Secret yang wajib diisi:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+
+## Konfigurasi Env
+
+Variable non-secret di `wrangler.jsonc`:
+
+```jsonc
+"vars": {
+  "MAIL_DOMAIN": "mail.example.com",
+  "MAIL_DOMAINS": "mail.example.com,mail2.example.com",
+  "PUBLIC_BASE_URL": "https://tempmail-bot-template.<your-subdomain>.workers.dev",
+  "ADMIN_IDS": "123456789,987654321",
+  "ADMIN_CONTACT": "@yourtelegramusername",
+  "INBOX_TTL_HOURS": "24",
+  "MAX_BODY_CHARS": "12000",
+  "AUTO_DELETE_EXPIRED": "true"
+}
+```
+
+Keterangan:
+
+- `ADMIN_IDS` dipisah koma
+- admin pertama otomatis dianggap admin utama
+- admin punya akses API unlimited
+- `PUBLIC_BASE_URL` dipakai untuk link dan dokumentasi API yang dikirim bot
+
+## Setup Cepat
+
+1. Buat bot Telegram lewat `@BotFather`
+2. Install dependency: `npm install`
+3. Buat database D1: `npx wrangler d1 create tempmail`
+4. Salin `database_id` hasil create ke `wrangler.jsonc`
+5. Isi secret dengan `npx wrangler secret put TELEGRAM_BOT_TOKEN` dan `npx wrangler secret put TELEGRAM_WEBHOOK_SECRET`
+6. Jalankan migrasi dengan `npm run db:migrate:local` lalu `npm run db:migrate:remote`
+7. Deploy Worker: `npm run deploy`
+8. Set webhook Telegram ke `https://<worker-host>/telegram/webhook`
+9. Aktifkan Cloudflare Email Routing dan arahkan alamat/catch-all ke Worker dengan aksi `Send to a Worker`
+
+## Set Webhook Telegram
+
+```powershell
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" `
+  -H "Content-Type: application/json" `
+  -d "{\"url\":\"https://<worker-host>/telegram/webhook\",\"secret_token\":\"<TELEGRAM_WEBHOOK_SECRET>\",\"allowed_updates\":[\"message\",\"callback_query\"]}"
+```
+
+`<worker-host>` bisa berupa domain `workers.dev` atau custom domain Anda.
+
+## Setup Email Routing
+
+1. Aktifkan Email Routing pada domain temp mail Anda
+2. Pastikan MX dan DNS verifikasi dari Cloudflare sudah valid
+3. Buat custom address atau catch-all untuk domain/subdomain temp mail
+4. Pilih aksi `Send to a Worker`
+5. Arahkan ke Worker project ini
+
+Penting:
+
+- Jangan pilih `Send to an email`
+- Jangan forward ke Gmail/Outlook bila ingin mode temp-mail murni
+- Domain yang boleh dipakai harus cocok dengan `MAIL_DOMAIN` atau `MAIL_DOMAINS`
+
+## Command Bot
+
+- `/start` atau `/help`
+- `/new`
+- `/new promo`
+- `/my`
+- `/inbox promo`
+- `/read email@domain`
+- `/renew promo`
+- `/delete promo`
+- `/api`
+
+Command admin:
+
+- `/admin`
+- `/grant <user_id>`
+- `/grant <user_id> 30 1500`
+- `/revoke <user_id>`
+- `/apiusers`
+
+## REST API
+
+Base URL mengikuti `PUBLIC_BASE_URL`.
+
+Header:
+
+```text
+X-API-Key: <USER_API_KEY>
+Content-Type: application/json
+```
+
+Endpoint utama:
+
+- `GET /api/health`
+- `POST /api/inboxes`
+- `GET /api/inboxes`
+- `GET /api/inboxes/{alias}/messages`
+- `GET /api/messages/{id}`
+- `DELETE /api/inboxes/{alias}`
+- `GET /api/webhook`
+- `PUT /api/webhook`
+- `POST /api/webhook/test`
+- `DELETE /api/webhook`
+
+Webhook header saat event terkirim:
+
+- `x-tempmail-event`
+- `x-tempmail-timestamp`
+- `x-tempmail-user-id`
+- `x-tempmail-signature: sha256=<hmac>` jika secret diisi
+
+User yang sudah diberi akses bisa pakai `/api` untuk melihat key, kuota, dan menerima file `api-doc.md` yang otomatis dibuat dari konfigurasi aktif.
+
+## Development
+
+- `npm run dev`
+- `npm run check`
+
+## Catatan
+
+- `AUTO_DELETE_EXPIRED=true` akan membersihkan inbox yang expired bila nanti cleanup diaktifkan penuh
+- Jika ingin simpan attachment atau raw email, tambahkan binding seperti R2
+- Jika ingin SMTP/IMAP penuh, arsitekturnya berbeda dan bukan fokus template ini
+
+## Referensi
+
+- Cloudflare Email Workers Runtime API: [developers.cloudflare.com/email-routing/email-workers/runtime-api](https://developers.cloudflare.com/email-routing/email-workers/runtime-api/)
+- Cloudflare Email Routing setup: [developers.cloudflare.com/email-routing/setup/email-routing-addresses](https://developers.cloudflare.com/email-routing/setup/email-routing-addresses/)
+- Cloudflare Email Routing subdomain: [developers.cloudflare.com/email-routing/setup/subdomains](https://developers.cloudflare.com/email-routing/setup/subdomains/)
+- Telegram Bot API `setWebhook`: [core.telegram.org/bots/api#setwebhook](https://core.telegram.org/bots/api#setwebhook)
